@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,8 @@ import {
   TextInput,
   Platform,
   ActivityIndicator,
+  Animated,
+  Dimensions,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -16,15 +18,26 @@ import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 import { createWalkSocket } from "@/lib/websocket";
 
+const { width } = Dimensions.get("window");
+
 export default function JoinScreen() {
   const { name } = useLocalSearchParams<{ name: string }>();
   const insets = useSafeAreaInsets();
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
 
   const webTopInset = Platform.OS === "web" ? 67 : 0;
   const webBottomInset = Platform.OS === "web" ? 34 : 0;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
+    ]).start();
+  }, []);
 
   const handleJoin = () => {
     if (code.length < 5) return;
@@ -83,37 +96,53 @@ export default function JoinScreen() {
         },
       ]}
     >
-      <Pressable onPress={() => router.back()} style={styles.backButton}>
-        <Ionicons name="chevron-back" size={24} color={Colors.dark.text} />
-      </Pressable>
+      <LinearGradient
+        colors={["#080C14", "#0D1424", "#111D30", "#0D1424", "#080C14"]}
+        locations={[0, 0.2, 0.5, 0.8, 1]}
+        style={StyleSheet.absoluteFill}
+      />
 
-      <View style={styles.content}>
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <View style={[styles.bgOrb, { top: "20%", right: "10%", width: 140, height: 140, backgroundColor: "rgba(99, 102, 241, 0.05)" }]} />
+        <View style={[styles.bgOrb, { bottom: "25%", left: "5%", width: 120, height: 120, backgroundColor: "rgba(0, 229, 160, 0.04)" }]} />
+      </View>
+
+      <View style={styles.header}>
+        <Pressable onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="chevron-back" size={22} color={Colors.dark.textSecondary} />
+        </Pressable>
+      </View>
+
+      <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
         <Text style={styles.heading}>Join a Walk</Text>
         <Text style={styles.subheading}>
           Enter the 5-character code from your friend
         </Text>
 
-        <View style={styles.codeInputRow}>
-          {Array.from({ length: 5 }).map((_, i) => (
-            <View
-              key={i}
-              style={[
-                styles.codeBox,
-                code.length === i && styles.codeBoxActive,
-                code[i] && styles.codeBoxFilled,
-              ]}
-            >
-              <Text
+        <Pressable style={styles.codeInputArea} onPress={() => {}}>
+          <View style={styles.codeInputRow}>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <View
+                key={i}
                 style={[
-                  styles.codeBoxText,
-                  code[i] && styles.codeBoxTextFilled,
+                  styles.codeBox,
+                  code.length === i && styles.codeBoxActive,
+                  code[i] && styles.codeBoxFilled,
                 ]}
               >
-                {code[i] || ""}
-              </Text>
-            </View>
-          ))}
-        </View>
+                <Text
+                  style={[
+                    styles.codeBoxText,
+                    code[i] && styles.codeBoxTextFilled,
+                  ]}
+                >
+                  {code[i] || ""}
+                </Text>
+                {code.length === i && <View style={styles.cursor} />}
+              </View>
+            ))}
+          </View>
+        </Pressable>
 
         <TextInput
           style={styles.hiddenInput}
@@ -128,11 +157,11 @@ export default function JoinScreen() {
 
         {error && (
           <View style={styles.errorRow}>
-            <Ionicons name="alert-circle" size={15} color={Colors.dark.danger} />
+            <View style={styles.errorDot} />
             <Text style={styles.errorText}>{error}</Text>
           </View>
         )}
-      </View>
+      </Animated.View>
 
       <Pressable
         onPress={handleJoin}
@@ -144,12 +173,12 @@ export default function JoinScreen() {
         ]}
       >
         {loading ? (
-          <View style={styles.joinButtonInner}>
+          <View style={[styles.joinButtonInner, { backgroundColor: Colors.dark.primary }]}>
             <ActivityIndicator color={Colors.dark.background} />
           </View>
         ) : (
           <LinearGradient
-            colors={code.length >= 5 ? ["#00E5A0", "#00C08B"] : ["#1E2640", "#1E2640"]}
+            colors={code.length >= 5 ? ["#00E5A0", "#00C88A", "#00B07A"] : ["#1C2540", "#1C2540"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.joinButtonInner}
@@ -175,11 +204,23 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.dark.background,
     paddingHorizontal: 24,
   },
+  bgOrb: {
+    position: "absolute",
+    borderRadius: 999,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
   backButton: {
     width: 44,
     height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(17, 24, 39, 0.6)",
+    borderWidth: 1,
+    borderColor: Colors.dark.cardBorder,
     justifyContent: "center",
-    alignItems: "flex-start",
+    alignItems: "center",
   },
   content: {
     flex: 1,
@@ -188,46 +229,57 @@ const styles = StyleSheet.create({
   },
   heading: {
     fontFamily: "Outfit_700Bold",
-    fontSize: 28,
+    fontSize: 30,
     color: Colors.dark.text,
-    marginBottom: 6,
+    marginBottom: 8,
   },
   subheading: {
     fontFamily: "Outfit_400Regular",
     fontSize: 14,
     color: Colors.dark.textSecondary,
     textAlign: "center",
-    marginBottom: 32,
+    marginBottom: 36,
+  },
+  codeInputArea: {
+    marginBottom: 16,
   },
   codeInputRow: {
     flexDirection: "row",
     gap: 10,
-    marginBottom: 16,
   },
   codeBox: {
-    width: 50,
-    height: 58,
-    borderRadius: 12,
-    backgroundColor: Colors.dark.card,
+    width: 52,
+    height: 62,
+    borderRadius: 14,
+    backgroundColor: "rgba(17, 24, 39, 0.8)",
     borderWidth: 1.5,
-    borderColor: Colors.dark.cardBorder,
+    borderColor: Colors.dark.cardBorderLight,
     justifyContent: "center",
     alignItems: "center",
   },
   codeBoxActive: {
     borderColor: Colors.dark.primary,
+    backgroundColor: "rgba(0, 229, 160, 0.04)",
   },
   codeBoxFilled: {
-    borderColor: Colors.dark.primary,
-    backgroundColor: Colors.dark.primaryDim,
+    borderColor: "rgba(0, 229, 160, 0.35)",
+    backgroundColor: "rgba(0, 229, 160, 0.08)",
   },
   codeBoxText: {
     fontFamily: "Outfit_700Bold",
-    fontSize: 22,
+    fontSize: 24,
     color: Colors.dark.textMuted,
   },
   codeBoxTextFilled: {
-    color: Colors.dark.primary,
+    color: Colors.dark.primaryLight,
+  },
+  cursor: {
+    position: "absolute",
+    bottom: 14,
+    width: 20,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: Colors.dark.primary,
   },
   hiddenInput: {
     position: "absolute",
@@ -238,7 +290,14 @@ const styles = StyleSheet.create({
   errorRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
+    marginTop: 4,
+  },
+  errorDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.dark.danger,
   },
   errorText: {
     fontFamily: "Outfit_500Medium",
@@ -246,7 +305,7 @@ const styles = StyleSheet.create({
     color: Colors.dark.danger,
   },
   joinButton: {
-    borderRadius: 14,
+    borderRadius: 16,
     overflow: "hidden",
   },
   joinButtonDisabled: {
@@ -256,8 +315,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 16,
+    paddingVertical: 17,
     gap: 8,
+    borderRadius: 16,
   },
   joinButtonText: {
     fontFamily: "Outfit_700Bold",

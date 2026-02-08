@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -6,6 +6,8 @@ import {
   Pressable,
   TextInput,
   Platform,
+  Animated,
+  Dimensions,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -14,14 +16,59 @@ import { Ionicons, Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 
+const { width, height } = Dimensions.get("window");
+
+function FloatingOrb({ delay, x, y, size, color }: { delay: number; x: number; y: number; size: number; color: string }) {
+  const anim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, { toValue: 1, duration: 4000 + delay * 500, useNativeDriver: false, delay: delay * 300 }),
+        Animated.timing(anim, { toValue: 0, duration: 4000 + delay * 500, useNativeDriver: false }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+
+  const translateY = anim.interpolate({ inputRange: [0, 1], outputRange: [0, -12] });
+  const opacity = anim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.15, 0.35, 0.15] });
+
+  return (
+    <Animated.View
+      style={{
+        position: "absolute",
+        left: x,
+        top: y,
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        backgroundColor: color,
+        opacity,
+        transform: [{ translateY }],
+      }}
+    />
+  );
+}
+
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const [name, setName] = useState("");
   const [showNameInput, setShowNameInput] = useState(false);
   const [mode, setMode] = useState<"create" | "join" | null>(null);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
 
   const webTopInset = Platform.OS === "web" ? 67 : 0;
   const webBottomInset = Platform.OS === "web" ? 34 : 0;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 700, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 700, useNativeDriver: true }),
+    ]).start();
+  }, []);
 
   const handleAction = (actionMode: "create" | "join") => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -42,14 +89,39 @@ export default function HomeScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
       <LinearGradient
-        colors={["#0A0E17", "#101828", "#0A0E17"]}
+        colors={["#080C14", "#0D1424", "#111D30", "#0D1424", "#080C14"]}
+        locations={[0, 0.25, 0.5, 0.75, 1]}
         style={StyleSheet.absoluteFill}
       />
 
-      <View style={styles.content}>
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <FloatingOrb delay={0} x={width * 0.1} y={height * 0.15} size={180} color="#00E5A0" />
+        <FloatingOrb delay={2} x={width * 0.6} y={height * 0.08} size={120} color="#6366F1" />
+        <FloatingOrb delay={1} x={width * 0.3} y={height * 0.65} size={140} color="#3B82F6" />
+        <FloatingOrb delay={3} x={width * 0.7} y={height * 0.55} size={100} color="#00E5A0" />
+
+        <View style={styles.gridOverlay}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <View
+              key={`h${i}`}
+              style={[styles.gridLine, { top: `${(i + 1) * 16}%`, left: 0, right: 0, height: 1 }]}
+            />
+          ))}
+          {Array.from({ length: 4 }).map((_, i) => (
+            <View
+              key={`v${i}`}
+              style={[styles.gridLine, { left: `${(i + 1) * 25}%`, top: 0, bottom: 0, width: 1 }]}
+            />
+          ))}
+        </View>
+      </View>
+
+      <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
         <View style={styles.logoSection}>
-          <View style={styles.iconContainer}>
-            <Ionicons name="shield-checkmark" size={36} color={Colors.dark.primary} />
+          <View style={styles.iconGlow}>
+            <View style={styles.iconContainer}>
+              <Ionicons name="shield-checkmark" size={32} color={Colors.dark.primary} />
+            </View>
           </View>
           <Text style={styles.title}>Friend-Zone</Text>
           <Text style={styles.subtitle}>Walk together. Stay safe.</Text>
@@ -65,7 +137,7 @@ export default function HomeScreen() {
               ]}
             >
               <LinearGradient
-                colors={["#00E5A0", "#00C08B"]}
+                colors={["#00E5A0", "#00C88A", "#00B07A"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.buttonGradient}
@@ -81,7 +153,7 @@ export default function HomeScreen() {
                 pressed && styles.buttonPressed,
               ]}
             >
-              <Feather name="link" size={18} color={Colors.dark.primary} />
+              <Feather name="link" size={17} color={Colors.dark.primary} />
               <Text style={styles.secondaryButtonText}>Join Walk</Text>
             </Pressable>
           </View>
@@ -114,7 +186,7 @@ export default function HomeScreen() {
               ]}
             >
               <LinearGradient
-                colors={name.trim() ? ["#00E5A0", "#00C08B"] : ["#1E2640", "#1E2640"]}
+                colors={name.trim() ? ["#00E5A0", "#00C88A", "#00B07A"] : ["#1C2540", "#1C2540"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.buttonGradient}
@@ -141,7 +213,7 @@ export default function HomeScreen() {
             </Pressable>
           </View>
         )}
-      </View>
+      </Animated.View>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + webBottomInset + 16 }]}>
         <Text style={styles.footerText}>Your group. Your safety.</Text>
@@ -155,6 +227,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.dark.background,
   },
+  gridOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  gridLine: {
+    position: "absolute",
+    backgroundColor: "rgba(255, 255, 255, 0.015)",
+  },
   content: {
     flex: 1,
     paddingHorizontal: 28,
@@ -162,41 +241,51 @@ const styles = StyleSheet.create({
   },
   logoSection: {
     alignItems: "center",
-    marginBottom: 52,
+    marginBottom: 56,
   },
-  iconContainer: {
-    width: 72,
-    height: 72,
-    borderRadius: 22,
-    backgroundColor: Colors.dark.primaryDim,
+  iconGlow: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: "rgba(0, 229, 160, 0.06)",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 20,
+  },
+  iconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: "rgba(0, 229, 160, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(0, 229, 160, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   title: {
     fontFamily: "Outfit_700Bold",
-    fontSize: 34,
+    fontSize: 36,
     color: Colors.dark.text,
-    letterSpacing: -0.5,
+    letterSpacing: -0.8,
   },
   subtitle: {
     fontFamily: "Outfit_400Regular",
     fontSize: 15,
     color: Colors.dark.textSecondary,
-    marginTop: 4,
+    marginTop: 6,
   },
   actionSection: {
     gap: 12,
   },
   primaryButton: {
-    borderRadius: 14,
+    borderRadius: 16,
     overflow: "hidden",
   },
   buttonGradient: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 16,
+    paddingVertical: 17,
     gap: 8,
   },
   buttonPressed: {
@@ -215,11 +304,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 16,
-    borderRadius: 14,
+    paddingVertical: 17,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.dark.cardBorder,
-    backgroundColor: Colors.dark.card,
+    borderColor: Colors.dark.cardBorderLight,
+    backgroundColor: "rgba(17, 24, 39, 0.7)",
     gap: 8,
   },
   secondaryButtonText: {
@@ -238,17 +327,17 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   inputContainer: {
-    backgroundColor: Colors.dark.card,
-    borderRadius: 14,
+    backgroundColor: "rgba(17, 24, 39, 0.8)",
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.dark.cardBorder,
-    paddingHorizontal: 16,
+    borderColor: Colors.dark.cardBorderLight,
+    paddingHorizontal: 18,
   },
   input: {
     fontFamily: "Outfit_500Medium",
     fontSize: 17,
     color: Colors.dark.text,
-    paddingVertical: 16,
+    paddingVertical: 17,
   },
   backLink: {
     alignSelf: "center",

@@ -8,10 +8,12 @@ import {
   Alert,
   ActivityIndicator,
   Animated as RNAnimated,
+  Dimensions,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons, Feather } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import * as Location from "expo-location";
 import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
@@ -53,10 +55,22 @@ export default function WalkScreen() {
   const wsRef = useRef<WebSocket | null>(null);
   const mapRef = useRef<any>(null);
   const pulseAnim = useRef(new RNAnimated.Value(0)).current;
+  const loadingPulse = useRef(new RNAnimated.Value(0.4)).current;
 
   useEffect(() => {
     const timeout = setTimeout(() => setLoading(false), 5000);
     return () => clearTimeout(timeout);
+  }, []);
+
+  useEffect(() => {
+    const loop = RNAnimated.loop(
+      RNAnimated.sequence([
+        RNAnimated.timing(loadingPulse, { toValue: 1, duration: 1200, useNativeDriver: true }),
+        RNAnimated.timing(loadingPulse, { toValue: 0.4, duration: 1200, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
   }, []);
 
   useEffect(() => {
@@ -84,7 +98,7 @@ export default function WalkScreen() {
 
   const alertBgColor = pulseAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ["rgba(255, 71, 87, 0.15)", "rgba(255, 71, 87, 0.35)"],
+    outputRange: ["rgba(255, 71, 87, 0.1)", "rgba(255, 71, 87, 0.25)"],
   });
 
   useEffect(() => {
@@ -275,7 +289,20 @@ export default function WalkScreen() {
   if (loading) {
     return (
       <View style={styles.loadingScreen}>
-        <ActivityIndicator size="large" color={Colors.dark.primary} />
+        <LinearGradient
+          colors={["#080C14", "#0D1424", "#111D30", "#0D1424", "#080C14"]}
+          locations={[0, 0.2, 0.5, 0.8, 1]}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          <View style={[styles.loadingOrb, { top: "30%", left: "20%", width: 160, height: 160, backgroundColor: "rgba(0, 229, 160, 0.04)" }]} />
+          <View style={[styles.loadingOrb, { top: "50%", right: "15%", width: 120, height: 120, backgroundColor: "rgba(99, 102, 241, 0.04)" }]} />
+        </View>
+        <RNAnimated.View style={[styles.loadingContent, { opacity: loadingPulse }]}>
+          <View style={styles.loadingIconWrap}>
+            <Ionicons name="locate" size={32} color={Colors.dark.primary} />
+          </View>
+        </RNAnimated.View>
         <Text style={styles.loadingText}>Getting your location...</Text>
       </View>
     );
@@ -296,8 +323,8 @@ export default function WalkScreen() {
           <MapCircle
             center={centroid}
             radius={tetherDistance * 0.3048}
-            strokeColor="rgba(0, 229, 160, 0.35)"
-            fillColor="rgba(0, 229, 160, 0.06)"
+            strokeColor="rgba(0, 229, 160, 0.3)"
+            fillColor="rgba(0, 229, 160, 0.05)"
             strokeWidth={2}
           />
         )}
@@ -327,6 +354,7 @@ export default function WalkScreen() {
                     style={[
                       styles.memberPin,
                       { backgroundColor: isSep ? Colors.dark.danger : color },
+                      isSep && styles.memberPinDanger,
                     ]}
                   >
                     <Ionicons name="person" size={12} color="#FFF" />
@@ -342,14 +370,14 @@ export default function WalkScreen() {
 
       <View style={[styles.topBar, { paddingTop: insets.top + webTopInset + 6 }]}>
         <View style={styles.topRow}>
-          <View style={styles.pill}>
+          <View style={[styles.pill, separated.length > 0 && styles.pillDanger]}>
             <View
               style={[
                 styles.pillDot,
                 { backgroundColor: separated.length > 0 ? Colors.dark.danger : Colors.dark.primary },
               ]}
             />
-            <Text style={styles.pillText}>
+            <Text style={[styles.pillText, separated.length > 0 && { color: Colors.dark.danger }]}>
               {separated.length > 0 ? `${separated.length} separated` : "All safe"}
             </Text>
           </View>
@@ -368,7 +396,9 @@ export default function WalkScreen() {
             { top: insets.top + webTopInset + 56, backgroundColor: alertBgColor },
           ]}
         >
-          <Ionicons name="warning" size={18} color={Colors.dark.danger} />
+          <View style={styles.alertIconWrap}>
+            <Ionicons name="warning" size={16} color={Colors.dark.danger} />
+          </View>
           <View style={styles.alertContent}>
             {separated.map((s) => (
               <View key={s.name} style={styles.alertRow}>
@@ -383,7 +413,9 @@ export default function WalkScreen() {
 
       {!locationGranted && !loading && (
         <View style={styles.permBanner}>
-          <Ionicons name="location" size={18} color={Colors.dark.secondary} />
+          <View style={styles.permIconWrap}>
+            <Ionicons name="location" size={16} color={Colors.dark.secondary} />
+          </View>
           <Text style={styles.permText}>Location access is needed</Text>
           {Platform.OS !== "web" && (
             <Pressable
@@ -391,6 +423,7 @@ export default function WalkScreen() {
                 const { status } = await Location.requestForegroundPermissionsAsync();
                 if (status === "granted") setLocationGranted(true);
               }}
+              style={styles.permButton}
             >
               <Text style={styles.permAction}>Grant</Text>
             </Pressable>
@@ -404,6 +437,12 @@ export default function WalkScreen() {
           { paddingBottom: insets.bottom + (Platform.OS === "web" ? 34 : 0) + 8 },
         ]}
       >
+        <LinearGradient
+          colors={["rgba(8, 12, 20, 0.95)", "rgba(8, 12, 20, 0.98)"]}
+          style={StyleSheet.absoluteFill}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+        />
         <Pressable
           onPress={() => {
             setShowControls(!showControls);
@@ -421,7 +460,9 @@ export default function WalkScreen() {
             ) : (
               <View style={styles.tetherRow}>
                 <Text style={styles.tetherLabel}>Tether</Text>
-                <Text style={styles.tetherVal}>{tetherDistance} ft</Text>
+                <View style={styles.tetherValuePill}>
+                  <Text style={styles.tetherVal}>{tetherDistance} ft</Text>
+                </View>
               </View>
             )}
 
@@ -435,7 +476,9 @@ export default function WalkScreen() {
                     : null;
                 return (
                   <View key={mn} style={styles.mlRow}>
-                    <View style={[styles.mlDot, { backgroundColor: isSep ? Colors.dark.danger : getMemberColor(idx) }]} />
+                    <View style={[styles.mlAvatar, { backgroundColor: isSep ? Colors.dark.danger : getMemberColor(idx) }]}>
+                      <Ionicons name="person" size={10} color="#FFF" />
+                    </View>
                     <Text style={[styles.mlName, isSep && { color: Colors.dark.danger }]}>{mn}</Text>
                     {dist != null && (
                       <Text style={[styles.mlDist, isSep && { color: Colors.dark.danger }]}>
@@ -451,7 +494,7 @@ export default function WalkScreen() {
               onPress={host ? handleEndWalk : handleLeave}
               style={({ pressed }) => [styles.endBtn, pressed && { opacity: 0.8 }]}
             >
-              <Ionicons name={host ? "stop-circle" : "exit"} size={18} color={Colors.dark.danger} />
+              <Ionicons name={host ? "stop-circle" : "exit"} size={16} color={Colors.dark.danger} />
               <Text style={styles.endBtnText}>{host ? "End Walk" : "Leave"}</Text>
             </Pressable>
           </View>
@@ -468,7 +511,9 @@ export default function WalkScreen() {
                 {separated.length > 0 ? `${separated.length} separated` : "All safe"}
               </Text>
             </View>
-            <Text style={styles.miniTether}>{tetherDistance}ft</Text>
+            <View style={styles.miniTetherPill}>
+              <Text style={styles.miniTether}>{tetherDistance}ft</Text>
+            </View>
           </View>
         )}
       </View>
@@ -488,10 +533,28 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 16,
   },
+  loadingOrb: {
+    position: "absolute",
+    borderRadius: 999,
+  },
+  loadingContent: {
+    alignItems: "center",
+  },
+  loadingIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: "rgba(0, 229, 160, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(0, 229, 160, 0.15)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
   loadingText: {
     fontFamily: "Outfit_500Medium",
     fontSize: 15,
     color: Colors.dark.textSecondary,
+    marginTop: 8,
   },
   topBar: {
     position: "absolute",
@@ -508,13 +571,17 @@ const styles = StyleSheet.create({
   pill: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(10, 14, 23, 0.88)",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    gap: 6,
+    backgroundColor: "rgba(8, 12, 20, 0.9)",
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 22,
+    gap: 7,
     borderWidth: 1,
-    borderColor: Colors.dark.cardBorder,
+    borderColor: Colors.dark.cardBorderLight,
+  },
+  pillDanger: {
+    borderColor: "rgba(255, 71, 87, 0.2)",
+    backgroundColor: "rgba(255, 71, 87, 0.08)",
   },
   pillDot: {
     width: 7,
@@ -530,13 +597,21 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 14,
     right: 14,
-    borderRadius: 14,
-    padding: 12,
+    borderRadius: 16,
+    padding: 14,
     flexDirection: "row",
-    gap: 8,
+    gap: 10,
     borderWidth: 1,
-    borderColor: "rgba(255, 71, 87, 0.3)",
+    borderColor: "rgba(255, 71, 87, 0.2)",
     zIndex: 10,
+  },
+  alertIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(255, 71, 87, 0.12)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   alertContent: {
     flex: 1,
@@ -554,35 +629,49 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   alertDist: {
-    fontFamily: "Outfit_600SemiBold",
+    fontFamily: "Outfit_700Bold",
     fontSize: 12,
     color: Colors.dark.danger,
   },
   alertTime: {
     fontFamily: "Outfit_400Regular",
     fontSize: 11,
-    color: "rgba(255, 71, 87, 0.6)",
+    color: "rgba(255, 71, 87, 0.5)",
   },
   permBanner: {
     position: "absolute",
     top: "45%",
     left: 20,
     right: 20,
-    backgroundColor: Colors.dark.card,
-    borderRadius: 14,
+    backgroundColor: "rgba(17, 24, 39, 0.9)",
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.dark.cardBorder,
-    padding: 14,
+    borderColor: Colors.dark.cardBorderLight,
+    padding: 16,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
     zIndex: 10,
+  },
+  permIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(59, 130, 246, 0.12)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   permText: {
     fontFamily: "Outfit_400Regular",
     fontSize: 13,
     color: Colors.dark.textSecondary,
     flex: 1,
+  },
+  permButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: Colors.dark.primaryDim,
   },
   permAction: {
     fontFamily: "Outfit_600SemiBold",
@@ -594,12 +683,12 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: "rgba(10, 14, 23, 0.94)",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     borderWidth: 1,
     borderBottomWidth: 0,
-    borderColor: Colors.dark.cardBorder,
+    borderColor: Colors.dark.cardBorderLight,
+    overflow: "hidden",
   },
   grabberArea: {
     alignItems: "center",
@@ -628,24 +717,32 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.dark.textSecondary,
   },
+  tetherValuePill: {
+    backgroundColor: Colors.dark.primaryDim,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
   tetherVal: {
     fontFamily: "Outfit_700Bold",
-    fontSize: 16,
+    fontSize: 15,
     color: Colors.dark.primary,
   },
   membersList: {
     paddingHorizontal: 16,
-    gap: 6,
+    gap: 8,
   },
   mlRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
   },
-  mlDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
+  mlAvatar: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: "center",
+    alignItems: "center",
   },
   mlName: {
     fontFamily: "Outfit_500Medium",
@@ -664,8 +761,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: 12,
     marginHorizontal: 8,
-    borderRadius: 12,
+    borderRadius: 14,
     backgroundColor: Colors.dark.dangerDim,
+    borderWidth: 1,
+    borderColor: "rgba(255, 71, 87, 0.15)",
     gap: 6,
   },
   endBtnText: {
@@ -683,7 +782,7 @@ const styles = StyleSheet.create({
   miniLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 7,
   },
   miniDot: {
     width: 7,
@@ -694,6 +793,14 @@ const styles = StyleSheet.create({
     fontFamily: "Outfit_600SemiBold",
     fontSize: 13,
     color: Colors.dark.text,
+  },
+  miniTetherPill: {
+    backgroundColor: "rgba(17, 24, 39, 0.6)",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.dark.cardBorder,
   },
   miniTether: {
     fontFamily: "Outfit_500Medium",
@@ -719,20 +826,23 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   memberPin: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.25)",
+    borderColor: "rgba(255,255,255,0.3)",
+  },
+  memberPinDanger: {
+    borderColor: "rgba(255, 71, 87, 0.4)",
   },
   pinLabel: {
     fontFamily: "Outfit_600SemiBold",
     fontSize: 10,
     color: Colors.dark.text,
-    textShadowColor: "rgba(0,0,0,0.8)",
+    textShadowColor: "rgba(0,0,0,0.9)",
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+    textShadowRadius: 4,
   },
 });

@@ -6,6 +6,7 @@ import {
   PanResponder,
   Dimensions,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import Colors from "@/constants/colors";
 
 interface TetherSliderProps {
@@ -54,16 +55,17 @@ export default function TetherSlider({
         <Text style={styles.label}>Tether Distance</Text>
         <View style={styles.valuePill}>
           <Text style={styles.valueText}>{value} ft</Text>
+          <View style={styles.modeDivider} />
           <Text style={styles.modeText}>{getLabel()}</Text>
         </View>
       </View>
       <View style={styles.trackContainer}>
         <View style={styles.track}>
-          <View
-            style={[
-              styles.trackFill,
-              { width: thumbLeft + THUMB_SIZE / 2 },
-            ]}
+          <LinearGradient
+            colors={["#00E5A0", "#00B07A"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={[styles.trackFill, { width: thumbLeft + THUMB_SIZE / 2 }]}
           />
         </View>
         <View
@@ -94,7 +96,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontFamily: "Outfit_600SemiBold",
-    fontSize: 15,
+    fontSize: 14,
     color: Colors.dark.textSecondary,
   },
   valuePill: {
@@ -103,13 +105,20 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.dark.primaryDim,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 20,
-    gap: 6,
+    borderRadius: 12,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "rgba(0, 229, 160, 0.12)",
   },
   valueText: {
     fontFamily: "Outfit_700Bold",
-    fontSize: 15,
+    fontSize: 14,
     color: Colors.dark.primary,
+  },
+  modeDivider: {
+    width: 1,
+    height: 12,
+    backgroundColor: "rgba(0, 229, 160, 0.2)",
   },
   modeText: {
     fontFamily: "Outfit_400Regular",
@@ -123,14 +132,13 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   track: {
-    height: 6,
+    height: 5,
     backgroundColor: Colors.dark.cardBorder,
     borderRadius: 3,
     overflow: "hidden",
   },
   trackFill: {
     height: "100%",
-    backgroundColor: Colors.dark.primary,
     borderRadius: 3,
   },
   thumb: {
@@ -144,7 +152,7 @@ const styles = StyleSheet.create({
     shadowColor: Colors.dark.primary,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.5,
-    shadowRadius: 8,
+    shadowRadius: 10,
     elevation: 5,
   },
   thumbInner: {
