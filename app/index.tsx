@@ -6,7 +6,6 @@ import {
   Pressable,
   TextInput,
   Platform,
-  Dimensions,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -14,8 +13,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons, Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
-
-const { width, height } = Dimensions.get("window");
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
@@ -45,17 +42,14 @@ export default function HomeScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
       <LinearGradient
-        colors={["#0A0E17", "#0F1A2E", "#0A0E17"]}
+        colors={["#0A0E17", "#101828", "#0A0E17"]}
         style={StyleSheet.absoluteFill}
       />
-
-      <View style={styles.bgOrb1} />
-      <View style={styles.bgOrb2} />
 
       <View style={styles.content}>
         <View style={styles.logoSection}>
           <View style={styles.iconContainer}>
-            <Ionicons name="shield-checkmark" size={40} color={Colors.dark.primary} />
+            <Ionicons name="shield-checkmark" size={36} color={Colors.dark.primary} />
           </View>
           <Text style={styles.title}>Friend-Zone</Text>
           <Text style={styles.subtitle}>Walk together. Stay safe.</Text>
@@ -76,7 +70,6 @@ export default function HomeScreen() {
                 end={{ x: 1, y: 1 }}
                 style={styles.buttonGradient}
               >
-                <Ionicons name="add-circle" size={24} color={Colors.dark.background} />
                 <Text style={styles.primaryButtonText}>Start Walk</Text>
               </LinearGradient>
             </Pressable>
@@ -88,32 +81,9 @@ export default function HomeScreen() {
                 pressed && styles.buttonPressed,
               ]}
             >
-              <Feather name="link" size={20} color={Colors.dark.primary} />
+              <Feather name="link" size={18} color={Colors.dark.primary} />
               <Text style={styles.secondaryButtonText}>Join Walk</Text>
             </Pressable>
-
-            <View style={styles.howItWorks}>
-              <View style={styles.step}>
-                <View style={styles.stepDot}>
-                  <Text style={styles.stepNum}>1</Text>
-                </View>
-                <Text style={styles.stepText}>Host starts a walk</Text>
-              </View>
-              <View style={styles.stepLine} />
-              <View style={styles.step}>
-                <View style={styles.stepDot}>
-                  <Text style={styles.stepNum}>2</Text>
-                </View>
-                <Text style={styles.stepText}>Friends scan or enter code</Text>
-              </View>
-              <View style={styles.stepLine} />
-              <View style={styles.step}>
-                <View style={styles.stepDot}>
-                  <Text style={styles.stepNum}>3</Text>
-                </View>
-                <Text style={styles.stepText}>Stay tethered, stay safe</Text>
-              </View>
-            </View>
           </View>
         ) : (
           <View style={styles.nameSection}>
@@ -121,7 +91,6 @@ export default function HomeScreen() {
               {mode === "create" ? "What should we call you?" : "Enter your name"}
             </Text>
             <View style={styles.inputContainer}>
-              <Ionicons name="person" size={18} color={Colors.dark.textMuted} />
               <TextInput
                 style={styles.input}
                 placeholder="Your name"
@@ -145,7 +114,7 @@ export default function HomeScreen() {
               ]}
             >
               <LinearGradient
-                colors={name.trim() ? ["#00E5A0", "#00C08B"] : ["#2A3040", "#2A3040"]}
+                colors={name.trim() ? ["#00E5A0", "#00C08B"] : ["#1E2640", "#1E2640"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.buttonGradient}
@@ -158,11 +127,6 @@ export default function HomeScreen() {
                 >
                   Continue
                 </Text>
-                <Ionicons
-                  name="arrow-forward"
-                  size={20}
-                  color={name.trim() ? Colors.dark.background : Colors.dark.textMuted}
-                />
               </LinearGradient>
             </Pressable>
             <Pressable
@@ -191,67 +155,49 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.dark.background,
   },
-  bgOrb1: {
-    position: "absolute",
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    backgroundColor: "rgba(0, 229, 160, 0.04)",
-    top: -50,
-    right: -100,
-  },
-  bgOrb2: {
-    position: "absolute",
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: "rgba(59, 130, 246, 0.04)",
-    bottom: 100,
-    left: -60,
-  },
   content: {
     flex: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: 28,
     justifyContent: "center",
   },
   logoSection: {
     alignItems: "center",
-    marginBottom: 48,
+    marginBottom: 52,
   },
   iconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
+    width: 72,
+    height: 72,
+    borderRadius: 22,
     backgroundColor: Colors.dark.primaryDim,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: 16,
   },
   title: {
     fontFamily: "Outfit_700Bold",
-    fontSize: 36,
+    fontSize: 34,
     color: Colors.dark.text,
     letterSpacing: -0.5,
   },
   subtitle: {
     fontFamily: "Outfit_400Regular",
-    fontSize: 16,
+    fontSize: 15,
     color: Colors.dark.textSecondary,
-    marginTop: 6,
+    marginTop: 4,
   },
   actionSection: {
-    gap: 16,
+    gap: 12,
   },
   primaryButton: {
-    borderRadius: 16,
+    borderRadius: 14,
     overflow: "hidden",
   },
   buttonGradient: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 18,
-    gap: 10,
+    paddingVertical: 16,
+    gap: 8,
   },
   buttonPressed: {
     opacity: 0.85,
@@ -262,86 +208,47 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     fontFamily: "Outfit_700Bold",
-    fontSize: 18,
+    fontSize: 17,
     color: Colors.dark.background,
   },
   secondaryButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 18,
-    borderRadius: 16,
-    borderWidth: 1.5,
+    paddingVertical: 16,
+    borderRadius: 14,
+    borderWidth: 1,
     borderColor: Colors.dark.cardBorder,
     backgroundColor: Colors.dark.card,
-    gap: 10,
+    gap: 8,
   },
   secondaryButtonText: {
     fontFamily: "Outfit_600SemiBold",
-    fontSize: 18,
+    fontSize: 17,
     color: Colors.dark.primary,
   },
-  howItWorks: {
-    marginTop: 32,
-    gap: 4,
-  },
-  step: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  stepDot: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: Colors.dark.card,
-    borderWidth: 1,
-    borderColor: Colors.dark.cardBorder,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  stepNum: {
-    fontFamily: "Outfit_600SemiBold",
-    fontSize: 12,
-    color: Colors.dark.textSecondary,
-  },
-  stepLine: {
-    width: 1,
-    height: 12,
-    backgroundColor: Colors.dark.cardBorder,
-    marginLeft: 14,
-  },
-  stepText: {
-    fontFamily: "Outfit_400Regular",
-    fontSize: 14,
-    color: Colors.dark.textSecondary,
-  },
   nameSection: {
-    gap: 16,
+    gap: 14,
   },
   namePrompt: {
     fontFamily: "Outfit_600SemiBold",
-    fontSize: 22,
+    fontSize: 20,
     color: Colors.dark.text,
     textAlign: "center",
-    marginBottom: 8,
+    marginBottom: 4,
   },
   inputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
     backgroundColor: Colors.dark.card,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.dark.cardBorder,
     paddingHorizontal: 16,
-    gap: 12,
   },
   input: {
-    flex: 1,
     fontFamily: "Outfit_500Medium",
     fontSize: 17,
     color: Colors.dark.text,
-    paddingVertical: 18,
+    paddingVertical: 16,
   },
   backLink: {
     alignSelf: "center",

@@ -78,7 +78,7 @@ export default function JoinScreen() {
       style={[
         styles.container,
         {
-          paddingTop: insets.top + webTopInset + 12,
+          paddingTop: insets.top + webTopInset + 8,
           paddingBottom: insets.bottom + webBottomInset + 16,
         },
       ]}
@@ -88,12 +88,9 @@ export default function JoinScreen() {
       </Pressable>
 
       <View style={styles.content}>
-        <View style={styles.iconWrap}>
-          <Ionicons name="link" size={36} color={Colors.dark.primary} />
-        </View>
         <Text style={styles.heading}>Join a Walk</Text>
         <Text style={styles.subheading}>
-          Enter the 5-character code from your friend's screen
+          Enter the 5-character code from your friend
         </Text>
 
         <View style={styles.codeInputRow}>
@@ -131,7 +128,7 @@ export default function JoinScreen() {
 
         {error && (
           <View style={styles.errorRow}>
-            <Ionicons name="warning" size={16} color={Colors.dark.danger} />
+            <Ionicons name="alert-circle" size={15} color={Colors.dark.danger} />
             <Text style={styles.errorText}>{error}</Text>
           </View>
         )}
@@ -147,19 +144,16 @@ export default function JoinScreen() {
         ]}
       >
         {loading ? (
-          <ActivityIndicator color={Colors.dark.background} />
+          <View style={styles.joinButtonInner}>
+            <ActivityIndicator color={Colors.dark.background} />
+          </View>
         ) : (
           <LinearGradient
-            colors={code.length >= 5 ? ["#00E5A0", "#00C08B"] : ["#2A3040", "#2A3040"]}
+            colors={code.length >= 5 ? ["#00E5A0", "#00C08B"] : ["#1E2640", "#1E2640"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.joinButtonInner}
           >
-            <Ionicons
-              name="enter"
-              size={22}
-              color={code.length >= 5 ? Colors.dark.background : Colors.dark.textMuted}
-            />
             <Text
               style={[
                 styles.joinButtonText,
@@ -192,15 +186,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  iconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 20,
-    backgroundColor: Colors.dark.primaryDim,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 20,
-  },
   heading: {
     fontFamily: "Outfit_700Bold",
     fontSize: 28,
@@ -209,21 +194,20 @@ const styles = StyleSheet.create({
   },
   subheading: {
     fontFamily: "Outfit_400Regular",
-    fontSize: 15,
+    fontSize: 14,
     color: Colors.dark.textSecondary,
     textAlign: "center",
-    marginBottom: 36,
-    paddingHorizontal: 20,
+    marginBottom: 32,
   },
   codeInputRow: {
     flexDirection: "row",
     gap: 10,
-    marginBottom: 20,
+    marginBottom: 16,
   },
   codeBox: {
-    width: 52,
-    height: 62,
-    borderRadius: 14,
+    width: 50,
+    height: 58,
+    borderRadius: 12,
     backgroundColor: Colors.dark.card,
     borderWidth: 1.5,
     borderColor: Colors.dark.cardBorder,
@@ -239,7 +223,7 @@ const styles = StyleSheet.create({
   },
   codeBoxText: {
     fontFamily: "Outfit_700Bold",
-    fontSize: 24,
+    fontSize: 22,
     color: Colors.dark.textMuted,
   },
   codeBoxTextFilled: {
@@ -255,15 +239,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginTop: 8,
   },
   errorText: {
     fontFamily: "Outfit_500Medium",
-    fontSize: 14,
+    fontSize: 13,
     color: Colors.dark.danger,
   },
   joinButton: {
-    borderRadius: 16,
+    borderRadius: 14,
     overflow: "hidden",
   },
   joinButtonDisabled: {
@@ -273,12 +256,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 18,
-    gap: 10,
+    paddingVertical: 16,
+    gap: 8,
   },
   joinButtonText: {
     fontFamily: "Outfit_700Bold",
-    fontSize: 18,
+    fontSize: 17,
     color: Colors.dark.background,
   },
 });

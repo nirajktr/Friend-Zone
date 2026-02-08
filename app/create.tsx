@@ -6,14 +6,17 @@ import {
   Pressable,
   Platform,
   ActivityIndicator,
+  ScrollView,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons, Feather } from "@expo/vector-icons";
 import QRCode from "react-native-qrcode-svg";
+import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 import { createWalkSocket } from "@/lib/websocket";
+import { getMemberColor } from "@/lib/location-utils";
 
 export default function CreateScreen() {
   const { name } = useLocalSearchParams<{ name: string }>();
@@ -22,6 +25,7 @@ export default function CreateScreen() {
   const [members, setMembers] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const navigatingRef = useRef(false);
 
   const webTopInset = Platform.OS === "web" ? 67 : 0;
   const webBottomInset = Platform.OS === "web" ? 34 : 0;
@@ -59,7 +63,7 @@ export default function CreateScreen() {
     };
 
     return () => {
-      if (ws.readyState === WebSocket.OPEN) {
+      if (!navigatingRef.current && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: "end" }));
       }
       ws.close();
@@ -67,6 +71,7 @@ export default function CreateScreen() {
   }, [name]);
 
   const handleStartWalk = () => {
+    navigatingRef.current = true;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     router.replace({
       pathname: "/walk",
@@ -86,7 +91,7 @@ export default function CreateScreen() {
       style={[
         styles.container,
         {
-          paddingTop: insets.top + webTopInset + 12,
+          paddingTop: insets.top + webTopInset + 8,
           paddingBottom: insets.bottom + webBottomInset + 16,
         },
       ]}
@@ -95,25 +100,22 @@ export default function CreateScreen() {
         <Ionicons name="chevron-back" size={24} color={Colors.dark.text} />
       </Pressable>
 
-      <View style={styles.content}>
-        <Text style={styles.heading}>Your Walk</Text>
-        <Text style={styles.subheading}>Share this code with your group</Text>
-
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {code ? (
           <>
-            <View style={styles.qrContainer}>
+            <View style={styles.qrCard}>
               <View style={styles.qrInner}>
                 <QRCode
                   value={code}
-                  size={180}
+                  size={160}
                   backgroundColor="#FFFFFF"
                   color="#0A0E17"
                 />
               </View>
-            </View>
-
-            <View style={styles.codeContainer}>
-              <Text style={styles.codeLabel}>Walk Code</Text>
               <View style={styles.codeRow}>
                 {code.split("").map((char, i) => (
                   <View key={i} style={styles.codeChar}>
@@ -121,51 +123,46 @@ export default function CreateScreen() {
                   </View>
                 ))}
               </View>
+              <Text style={styles.shareHint}>Share this code with your group</Text>
+            </View>
+
+            <View style={styles.membersCard}>
+              <Text style={styles.membersTitle}>
+                Group ({members.length})
+              </Text>
+              {members.map((member, idx) => (
+                <View key={member} style={styles.memberRow}>
+                  <View
+                    style={[
+                      styles.memberDot,
+                      { backgroundColor: getMemberColor(idx) },
+                    ]}
+                  />
+                  <Text style={styles.memberName}>{member}</Text>
+                  {idx === 0 && (
+                    <View style={styles.hostBadge}>
+                      <Text style={styles.hostBadgeText}>Host</Text>
+                    </View>
+                  )}
+                </View>
+              ))}
+              {members.length < 2 && (
+                <Text style={styles.waitingText}>Waiting for friends...</Text>
+              )}
             </View>
           </>
         ) : error ? (
-          <View style={styles.errorContainer}>
-            <Ionicons name="warning" size={32} color={Colors.dark.danger} />
+          <View style={styles.centerMessage}>
+            <Ionicons name="alert-circle" size={28} color={Colors.dark.danger} />
             <Text style={styles.errorText}>{error}</Text>
           </View>
         ) : (
-          <View style={styles.loadingContainer}>
+          <View style={styles.centerMessage}>
             <ActivityIndicator size="large" color={Colors.dark.primary} />
             <Text style={styles.loadingText}>Creating walk...</Text>
           </View>
         )}
-
-        <View style={styles.membersSection}>
-          <View style={styles.membersHeader}>
-            <Feather name="users" size={18} color={Colors.dark.textSecondary} />
-            <Text style={styles.membersTitle}>
-              {members.length} {members.length === 1 ? "member" : "members"}
-            </Text>
-          </View>
-          {members.map((member, idx) => (
-            <View key={member} style={styles.memberRow}>
-              <View
-                style={[
-                  styles.memberDot,
-                  {
-                    backgroundColor:
-                      idx === 0 ? Colors.dark.primary : Colors.dark.secondary,
-                  },
-                ]}
-              />
-              <Text style={styles.memberName}>{member}</Text>
-              {idx === 0 && (
-                <View style={styles.hostBadge}>
-                  <Text style={styles.hostBadgeText}>Host</Text>
-                </View>
-              )}
-            </View>
-          ))}
-          {members.length < 2 && (
-            <Text style={styles.waitingText}>Waiting for friends to join...</Text>
-          )}
-        </View>
-      </View>
+      </ScrollView>
 
       <Pressable
         onPress={handleStartWalk}
@@ -176,19 +173,23 @@ export default function CreateScreen() {
           pressed && code ? { opacity: 0.85, transform: [{ scale: 0.98 }] } : null,
         ]}
       >
-        <Ionicons
-          name="walk"
-          size={22}
-          color={code ? Colors.dark.background : Colors.dark.textMuted}
-        />
-        <Text
-          style={[
-            styles.startButtonText,
-            !code && { color: Colors.dark.textMuted },
-          ]}
-        >
-          Begin Walk
-        </Text>
+        {code ? (
+          <LinearGradient
+            colors={["#00E5A0", "#00C08B"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.startButtonInner}
+          >
+            <Ionicons name="walk" size={20} color={Colors.dark.background} />
+            <Text style={styles.startButtonText}>Begin Walk</Text>
+          </LinearGradient>
+        ) : (
+          <View style={styles.startButtonInner}>
+            <Text style={[styles.startButtonText, { color: Colors.dark.textMuted }]}>
+              Begin Walk
+            </Text>
+          </View>
+        )}
       </Pressable>
     </View>
   );
@@ -206,56 +207,40 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "flex-start",
   },
-  content: {
+  scrollView: {
     flex: 1,
+  },
+  scrollContent: {
     alignItems: "center",
+    paddingTop: 8,
+    paddingBottom: 16,
+    gap: 16,
   },
-  heading: {
-    fontFamily: "Outfit_700Bold",
-    fontSize: 28,
-    color: Colors.dark.text,
-    marginBottom: 4,
-  },
-  subheading: {
-    fontFamily: "Outfit_400Regular",
-    fontSize: 15,
-    color: Colors.dark.textSecondary,
-    marginBottom: 28,
-  },
-  qrContainer: {
-    padding: 3,
-    borderRadius: 20,
+  qrCard: {
+    width: "100%",
     backgroundColor: Colors.dark.card,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: Colors.dark.cardBorder,
-    marginBottom: 24,
+    alignItems: "center",
+    paddingVertical: 28,
+    paddingHorizontal: 24,
+    gap: 20,
   },
   qrInner: {
-    padding: 20,
+    padding: 16,
     borderRadius: 16,
     backgroundColor: "#FFFFFF",
-  },
-  codeContainer: {
-    alignItems: "center",
-    marginBottom: 32,
-  },
-  codeLabel: {
-    fontFamily: "Outfit_500Medium",
-    fontSize: 13,
-    color: Colors.dark.textSecondary,
-    marginBottom: 8,
-    textTransform: "uppercase",
-    letterSpacing: 1,
   },
   codeRow: {
     flexDirection: "row",
     gap: 8,
   },
   codeChar: {
-    width: 44,
-    height: 52,
-    borderRadius: 12,
-    backgroundColor: Colors.dark.card,
+    width: 42,
+    height: 48,
+    borderRadius: 10,
+    backgroundColor: Colors.dark.background,
     borderWidth: 1,
     borderColor: Colors.dark.cardBorder,
     justifyContent: "center",
@@ -263,47 +248,28 @@ const styles = StyleSheet.create({
   },
   codeCharText: {
     fontFamily: "Outfit_700Bold",
-    fontSize: 22,
+    fontSize: 20,
     color: Colors.dark.primary,
   },
-  errorContainer: {
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 40,
+  shareHint: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 13,
+    color: Colors.dark.textMuted,
   },
-  errorText: {
-    fontFamily: "Outfit_500Medium",
-    fontSize: 16,
-    color: Colors.dark.danger,
-  },
-  loadingContainer: {
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 60,
-  },
-  loadingText: {
-    fontFamily: "Outfit_500Medium",
-    fontSize: 16,
-    color: Colors.dark.textSecondary,
-  },
-  membersSection: {
+  membersCard: {
     width: "100%",
     backgroundColor: Colors.dark.card,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.dark.cardBorder,
     padding: 16,
-  },
-  membersHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 12,
+    gap: 4,
   },
   membersTitle: {
     fontFamily: "Outfit_600SemiBold",
-    fontSize: 15,
+    fontSize: 14,
     color: Colors.dark.textSecondary,
+    marginBottom: 8,
   },
   memberRow: {
     flexDirection: "row",
@@ -312,51 +278,67 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   memberDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   memberName: {
     fontFamily: "Outfit_500Medium",
-    fontSize: 16,
+    fontSize: 15,
     color: Colors.dark.text,
     flex: 1,
   },
   hostBadge: {
     backgroundColor: Colors.dark.primaryDim,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
   },
   hostBadgeText: {
     fontFamily: "Outfit_600SemiBold",
     fontSize: 11,
     color: Colors.dark.primary,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
   },
   waitingText: {
     fontFamily: "Outfit_400Regular",
-    fontSize: 14,
+    fontSize: 13,
     color: Colors.dark.textMuted,
     textAlign: "center",
-    marginTop: 8,
+    paddingVertical: 8,
+  },
+  centerMessage: {
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 80,
+  },
+  errorText: {
+    fontFamily: "Outfit_500Medium",
+    fontSize: 15,
+    color: Colors.dark.danger,
+  },
+  loadingText: {
+    fontFamily: "Outfit_500Medium",
+    fontSize: 15,
+    color: Colors.dark.textSecondary,
   },
   startButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Colors.dark.primary,
-    paddingVertical: 18,
-    borderRadius: 16,
-    gap: 10,
+    borderRadius: 14,
+    overflow: "hidden",
   },
   startButtonDisabled: {
     backgroundColor: Colors.dark.card,
+    borderRadius: 14,
+  },
+  startButtonInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    gap: 8,
   },
   startButtonText: {
     fontFamily: "Outfit_700Bold",
-    fontSize: 18,
+    fontSize: 17,
     color: Colors.dark.background,
   },
 });

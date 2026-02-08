@@ -6,6 +6,7 @@ import {
   Pressable,
   Platform,
   Alert,
+  ActivityIndicator,
   Animated as RNAnimated,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -35,7 +36,6 @@ export default function WalkScreen() {
   }>();
   const insets = useSafeAreaInsets();
   const host = isHost === "true";
-
   const webTopInset = Platform.OS === "web" ? 67 : 0;
 
   const [members, setMembers] = useState<MemberLocation[]>([]);
@@ -46,11 +46,18 @@ export default function WalkScreen() {
   >([]);
   const [showControls, setShowControls] = useState(false);
   const [locationGranted, setLocationGranted] = useState(false);
+  const [myLat, setMyLat] = useState<number | null>(null);
+  const [myLng, setMyLng] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const wsRef = useRef<WebSocket | null>(null);
   const mapRef = useRef<any>(null);
-  const locationSubRef = useRef<Location.LocationSubscription | null>(null);
   const pulseAnim = useRef(new RNAnimated.Value(0)).current;
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setLoading(false), 5000);
+    return () => clearTimeout(timeout);
+  }, []);
 
   useEffect(() => {
     if (separated.length > 0) {
@@ -99,6 +106,7 @@ export default function WalkScreen() {
         const msg = JSON.parse(event.data);
         switch (msg.type) {
           case "joined":
+          case "error":
             break;
           case "members":
             setMemberNames(msg.members);
@@ -110,9 +118,7 @@ export default function WalkScreen() {
             setTetherDistance(msg.distance);
             break;
           case "ended":
-            Haptics.notificationAsync(
-              Haptics.NotificationFeedbackType.Warning
-            );
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
             if (Platform.OS === "web") {
               router.replace("/");
             } else {
@@ -121,81 +127,22 @@ export default function WalkScreen() {
               ]);
             }
             break;
-          case "error":
-            break;
         }
       } catch (e) {
-        console.error("WS parse error:", e);
+        console.error("WS error:", e);
       }
     };
-
-    ws.onerror = () => {};
 
     return () => {
       ws.close();
     };
   }, [code, name]);
 
-  useEffect(() => {
-    let sub: Location.LocationSubscription | null = null;
-
-    (async () => {
-      if (Platform.OS === "web") {
-        try {
-          const position = await new Promise<GeolocationPosition>(
-            (resolve, reject) => {
-              navigator.geolocation.getCurrentPosition(resolve, reject);
-            }
-          );
-          setLocationGranted(true);
-          sendLocation(
-            position.coords.latitude,
-            position.coords.longitude
-          );
-
-          const watchId = navigator.geolocation.watchPosition(
-            (pos) => {
-              sendLocation(pos.coords.latitude, pos.coords.longitude);
-            },
-            () => {},
-            { enableHighAccuracy: true, timeout: 10000, maximumAge: 2000 }
-          );
-
-          return () => navigator.geolocation.clearWatch(watchId);
-        } catch {
-          setLocationGranted(false);
-        }
-        return;
-      }
-
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        setLocationGranted(false);
-        return;
-      }
-      setLocationGranted(true);
-
-      sub = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.High,
-          timeInterval: 2000,
-          distanceInterval: 1,
-        },
-        (loc) => {
-          sendLocation(loc.coords.latitude, loc.coords.longitude);
-        }
-      );
-      locationSubRef.current = sub;
-    })();
-
-    return () => {
-      if (sub) sub.remove();
-      if (locationSubRef.current) locationSubRef.current.remove();
-    };
-  }, []);
-
   const sendLocation = useCallback(
     (latitude: number, longitude: number) => {
+      setMyLat(latitude);
+      setMyLng(longitude);
+      setLoading(false);
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(
           JSON.stringify({ type: "location", latitude, longitude })
@@ -206,6 +153,67 @@ export default function WalkScreen() {
   );
 
   useEffect(() => {
+    let sub: Location.LocationSubscription | null = null;
+    let watchId: number | undefined;
+
+    (async () => {
+      if (Platform.OS === "web") {
+        try {
+          const position = await new Promise<GeolocationPosition>(
+            (resolve, reject) => {
+              navigator.geolocation.getCurrentPosition(resolve, reject, {
+                enableHighAccuracy: true,
+                timeout: 10000,
+              });
+            }
+          );
+          setLocationGranted(true);
+          sendLocation(position.coords.latitude, position.coords.longitude);
+
+          watchId = navigator.geolocation.watchPosition(
+            (pos) => sendLocation(pos.coords.latitude, pos.coords.longitude),
+            () => {},
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 2000 }
+          );
+        } catch {
+          setLocationGranted(false);
+          setLoading(false);
+        }
+        return;
+      }
+
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        setLocationGranted(false);
+        setLoading(false);
+        return;
+      }
+      setLocationGranted(true);
+
+      const current = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      sendLocation(current.coords.latitude, current.coords.longitude);
+
+      sub = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 2000,
+          distanceInterval: 1,
+        },
+        (loc) => sendLocation(loc.coords.latitude, loc.coords.longitude)
+      );
+    })();
+
+    return () => {
+      if (sub) sub.remove();
+      if (watchId !== undefined && Platform.OS === "web") {
+        navigator.geolocation.clearWatch(watchId);
+      }
+    };
+  }, [sendLocation]);
+
+  useEffect(() => {
     const centroid = calculateCentroid(members);
     if (!centroid) {
       setSeparated([]);
@@ -214,15 +222,10 @@ export default function WalkScreen() {
 
     const sep = members
       .filter((m) => m.latitude !== null && m.longitude !== null)
-      .map((m) => {
-        const dist = distanceInFeet(
-          m.latitude!,
-          m.longitude!,
-          centroid.latitude,
-          centroid.longitude
-        );
-        return { ...m, distance: dist };
-      })
+      .map((m) => ({
+        ...m,
+        distance: distanceInFeet(m.latitude!, m.longitude!, centroid.latitude, centroid.longitude),
+      }))
       .filter((m) => m.distance > tetherDistance);
 
     if (sep.length > 0 && separated.length === 0) {
@@ -235,9 +238,7 @@ export default function WalkScreen() {
   const handleTetherChange = (val: number) => {
     setTetherDistance(val);
     if (host && wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(
-        JSON.stringify({ type: "tether_distance", distance: val })
-      );
+      wsRef.current.send(JSON.stringify({ type: "tether_distance", distance: val }));
     }
   };
 
@@ -270,37 +271,33 @@ export default function WalkScreen() {
   };
 
   const centroid = calculateCentroid(members);
-  const myLocation = members.find((m) => m.name === name);
 
-  const initialRegion = {
-    latitude: myLocation?.latitude ?? 37.9838,
-    longitude: myLocation?.longitude ?? 23.7275,
-    latitudeDelta: 0.005,
-    longitudeDelta: 0.005,
-  };
+  if (loading) {
+    return (
+      <View style={styles.loadingScreen}>
+        <ActivityIndicator size="large" color={Colors.dark.primary} />
+        <Text style={styles.loadingText}>Getting your location...</Text>
+      </View>
+    );
+  }
 
-  const currentRegion = myLocation?.latitude
-    ? {
-        latitude: myLocation.latitude,
-        longitude: myLocation.longitude!,
-        latitudeDelta: 0.004,
-        longitudeDelta: 0.004,
-      }
-    : undefined;
+  const mapRegion = myLat != null && myLng != null
+    ? { latitude: myLat, longitude: myLng, latitudeDelta: 0.003, longitudeDelta: 0.003 }
+    : null;
 
   return (
     <View style={styles.container}>
       <MapWrapper
         mapRef={mapRef}
-        initialRegion={initialRegion}
-        region={currentRegion}
+        initialRegion={mapRegion ?? { latitude: 0, longitude: 0, latitudeDelta: 10, longitudeDelta: 10 }}
+        region={mapRegion ?? undefined}
       >
         {centroid && (
           <MapCircle
             center={centroid}
             radius={tetherDistance * 0.3048}
-            strokeColor="rgba(0, 229, 160, 0.4)"
-            fillColor="rgba(0, 229, 160, 0.08)"
+            strokeColor="rgba(0, 229, 160, 0.35)"
+            fillColor="rgba(0, 229, 160, 0.06)"
             strokeWidth={2}
           />
         )}
@@ -317,39 +314,24 @@ export default function WalkScreen() {
           .filter((m) => m.latitude !== null && m.longitude !== null)
           .map((m, idx) => {
             const isSep = separated.some((s) => s.name === m.name);
-            const color = getMemberColor(
-              memberNames.indexOf(m.name) >= 0
-                ? memberNames.indexOf(m.name)
-                : idx
-            );
+            const mIdx = memberNames.indexOf(m.name);
+            const color = getMemberColor(mIdx >= 0 ? mIdx : idx);
             return (
               <MapMarker
                 key={m.name}
-                coordinate={{
-                  latitude: m.latitude!,
-                  longitude: m.longitude!,
-                }}
+                coordinate={{ latitude: m.latitude!, longitude: m.longitude! }}
                 anchor={{ x: 0.5, y: 0.5 }}
               >
-                <View style={styles.memberMarkerOuter}>
+                <View style={styles.memberMarkerWrap}>
                   <View
                     style={[
-                      styles.memberMarker,
-                      {
-                        backgroundColor: isSep
-                          ? Colors.dark.danger
-                          : color,
-                      },
+                      styles.memberPin,
+                      { backgroundColor: isSep ? Colors.dark.danger : color },
                     ]}
                   >
-                    <Ionicons name="person" size={14} color="#FFF" />
+                    <Ionicons name="person" size={12} color="#FFF" />
                   </View>
-                  <Text
-                    style={[
-                      styles.markerLabel,
-                      isSep && { color: Colors.dark.danger },
-                    ]}
-                  >
+                  <Text style={[styles.pinLabel, isSep && { color: Colors.dark.danger }]}>
                     {m.name}
                   </Text>
                 </View>
@@ -358,89 +340,61 @@ export default function WalkScreen() {
           })}
       </MapWrapper>
 
-      <View
-        style={[
-          styles.topBar,
-          { paddingTop: insets.top + webTopInset + 8 },
-        ]}
-      >
-        <View style={styles.topBarInner}>
-          <View style={styles.statusPill}>
+      <View style={[styles.topBar, { paddingTop: insets.top + webTopInset + 6 }]}>
+        <View style={styles.topRow}>
+          <View style={styles.pill}>
             <View
               style={[
-                styles.statusDot,
-                {
-                  backgroundColor:
-                    separated.length > 0
-                      ? Colors.dark.danger
-                      : Colors.dark.primary,
-                },
+                styles.pillDot,
+                { backgroundColor: separated.length > 0 ? Colors.dark.danger : Colors.dark.primary },
               ]}
             />
-            <Text style={styles.statusText}>
-              {separated.length > 0
-                ? `${separated.length} separated`
-                : "All safe"}
+            <Text style={styles.pillText}>
+              {separated.length > 0 ? `${separated.length} separated` : "All safe"}
             </Text>
           </View>
 
-          <View style={styles.memberCountPill}>
-            <Feather name="users" size={14} color={Colors.dark.text} />
-            <Text style={styles.memberCountText}>{memberNames.length}</Text>
+          <View style={styles.pill}>
+            <Feather name="users" size={13} color={Colors.dark.text} />
+            <Text style={styles.pillText}>{memberNames.length}</Text>
           </View>
         </View>
-
-        {code && (
-          <View style={styles.codePill}>
-            <Text style={styles.codePillText}>{code}</Text>
-          </View>
-        )}
       </View>
 
       {separated.length > 0 && (
         <RNAnimated.View
           style={[
             styles.alertBanner,
-            {
-              top: insets.top + webTopInset + 70,
-              backgroundColor: alertBgColor,
-            },
+            { top: insets.top + webTopInset + 56, backgroundColor: alertBgColor },
           ]}
         >
-          <Ionicons name="warning" size={20} color={Colors.dark.danger} />
+          <Ionicons name="warning" size={18} color={Colors.dark.danger} />
           <View style={styles.alertContent}>
             {separated.map((s) => (
               <View key={s.name} style={styles.alertRow}>
                 <Text style={styles.alertName}>{s.name}</Text>
-                <Text style={styles.alertDistance}>
-                  {Math.round(s.distance)} ft away
-                </Text>
-                <Text style={styles.alertTime}>
-                  {timeAgo(s.lastUpdate)}
-                </Text>
+                <Text style={styles.alertDist}>{Math.round(s.distance)}ft</Text>
+                <Text style={styles.alertTime}>{timeAgo(s.lastUpdate)}</Text>
               </View>
             ))}
           </View>
         </RNAnimated.View>
       )}
 
-      {!locationGranted && (
-        <View style={styles.permissionBanner}>
-          <Ionicons name="location" size={20} color={Colors.dark.secondary} />
-          <Text style={styles.permissionText}>
-            Location access needed to track your position
-          </Text>
-          <Pressable
-            onPress={async () => {
-              if (Platform.OS !== "web") {
-                const { status } =
-                  await Location.requestForegroundPermissionsAsync();
+      {!locationGranted && !loading && (
+        <View style={styles.permBanner}>
+          <Ionicons name="location" size={18} color={Colors.dark.secondary} />
+          <Text style={styles.permText}>Location access is needed</Text>
+          {Platform.OS !== "web" && (
+            <Pressable
+              onPress={async () => {
+                const { status } = await Location.requestForegroundPermissionsAsync();
                 if (status === "granted") setLocationGranted(true);
-              }
-            }}
-          >
-            <Text style={styles.permissionButton}>Grant</Text>
-          </Pressable>
+              }}
+            >
+              <Text style={styles.permAction}>Grant</Text>
+            </Pressable>
+          )}
         </View>
       )}
 
@@ -455,74 +409,37 @@ export default function WalkScreen() {
             setShowControls(!showControls);
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           }}
-          style={styles.controlsToggle}
+          style={styles.grabberArea}
         >
           <View style={styles.grabber} />
         </Pressable>
 
-        {showControls && (
-          <View style={styles.controlsContent}>
-            {host && (
-              <TetherSlider
-                value={tetherDistance}
-                onValueChange={handleTetherChange}
-              />
-            )}
-
-            {!host && (
-              <View style={styles.tetherInfo}>
-                <Text style={styles.tetherInfoLabel}>Tether Distance</Text>
-                <Text style={styles.tetherInfoValue}>{tetherDistance} ft</Text>
+        {showControls ? (
+          <View style={styles.controlsBody}>
+            {host ? (
+              <TetherSlider value={tetherDistance} onValueChange={handleTetherChange} />
+            ) : (
+              <View style={styles.tetherRow}>
+                <Text style={styles.tetherLabel}>Tether</Text>
+                <Text style={styles.tetherVal}>{tetherDistance} ft</Text>
               </View>
             )}
 
-            <View style={styles.memberList}>
-              <Text style={styles.memberListTitle}>Group Members</Text>
-              {memberNames.map((memberName, idx) => {
-                const loc = members.find((m) => m.name === memberName);
-                const isSep = separated.some((s) => s.name === memberName);
+            <View style={styles.membersList}>
+              {memberNames.map((mn, idx) => {
+                const loc = members.find((m) => m.name === mn);
+                const isSep = separated.some((s) => s.name === mn);
                 const dist =
                   centroid && loc?.latitude != null && loc?.longitude != null
-                    ? distanceInFeet(
-                        loc.latitude,
-                        loc.longitude,
-                        centroid.latitude,
-                        centroid.longitude
-                      )
+                    ? distanceInFeet(loc.latitude, loc.longitude, centroid.latitude, centroid.longitude)
                     : null;
                 return (
-                  <View key={memberName} style={styles.memberListRow}>
-                    <View
-                      style={[
-                        styles.memberListDot,
-                        {
-                          backgroundColor: isSep
-                            ? Colors.dark.danger
-                            : getMemberColor(idx),
-                        },
-                      ]}
-                    />
-                    <Text
-                      style={[
-                        styles.memberListName,
-                        isSep && { color: Colors.dark.danger },
-                      ]}
-                    >
-                      {memberName}
-                    </Text>
+                  <View key={mn} style={styles.mlRow}>
+                    <View style={[styles.mlDot, { backgroundColor: isSep ? Colors.dark.danger : getMemberColor(idx) }]} />
+                    <Text style={[styles.mlName, isSep && { color: Colors.dark.danger }]}>{mn}</Text>
                     {dist != null && (
-                      <Text
-                        style={[
-                          styles.memberListDist,
-                          isSep && { color: Colors.dark.danger },
-                        ]}
-                      >
-                        {Math.round(dist)} ft
-                      </Text>
-                    )}
-                    {loc?.lastUpdate && (
-                      <Text style={styles.memberListTime}>
-                        {timeAgo(loc.lastUpdate)}
+                      <Text style={[styles.mlDist, isSep && { color: Colors.dark.danger }]}>
+                        {Math.round(dist)}ft
                       </Text>
                     )}
                   </View>
@@ -530,65 +447,28 @@ export default function WalkScreen() {
               })}
             </View>
 
-            <View style={styles.actionRow}>
-              {host ? (
-                <Pressable
-                  onPress={handleEndWalk}
-                  style={({ pressed }) => [
-                    styles.endButton,
-                    pressed && { opacity: 0.8 },
-                  ]}
-                >
-                  <Ionicons
-                    name="stop-circle"
-                    size={20}
-                    color={Colors.dark.danger}
-                  />
-                  <Text style={styles.endButtonText}>End Walk</Text>
-                </Pressable>
-              ) : (
-                <Pressable
-                  onPress={handleLeave}
-                  style={({ pressed }) => [
-                    styles.endButton,
-                    pressed && { opacity: 0.8 },
-                  ]}
-                >
-                  <Ionicons
-                    name="exit"
-                    size={20}
-                    color={Colors.dark.danger}
-                  />
-                  <Text style={styles.endButtonText}>Leave Walk</Text>
-                </Pressable>
-              )}
-            </View>
+            <Pressable
+              onPress={host ? handleEndWalk : handleLeave}
+              style={({ pressed }) => [styles.endBtn, pressed && { opacity: 0.8 }]}
+            >
+              <Ionicons name={host ? "stop-circle" : "exit"} size={18} color={Colors.dark.danger} />
+              <Text style={styles.endBtnText}>{host ? "End Walk" : "Leave"}</Text>
+            </Pressable>
           </View>
-        )}
-
-        {!showControls && (
-          <View style={styles.miniControls}>
-            <View style={styles.miniRow}>
-              <View style={styles.miniStatusRow}>
-                <View
-                  style={[
-                    styles.miniDot,
-                    {
-                      backgroundColor:
-                        separated.length > 0
-                          ? Colors.dark.danger
-                          : Colors.dark.primary,
-                    },
-                  ]}
-                />
-                <Text style={styles.miniText}>
-                  {separated.length > 0
-                    ? `${separated.length} separated`
-                    : "All safe"}
-                </Text>
-              </View>
-              <Text style={styles.miniTether}>{tetherDistance}ft tether</Text>
+        ) : (
+          <View style={styles.miniBar}>
+            <View style={styles.miniLeft}>
+              <View
+                style={[
+                  styles.miniDot,
+                  { backgroundColor: separated.length > 0 ? Colors.dark.danger : Colors.dark.primary },
+                ]}
+              />
+              <Text style={styles.miniText}>
+                {separated.length > 0 ? `${separated.length} separated` : "All safe"}
+              </Text>
             </View>
+            <Text style={styles.miniTether}>{tetherDistance}ft</Text>
           </View>
         )}
       </View>
@@ -601,135 +481,112 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.dark.background,
   },
+  loadingScreen: {
+    flex: 1,
+    backgroundColor: Colors.dark.background,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 16,
+  },
+  loadingText: {
+    fontFamily: "Outfit_500Medium",
+    fontSize: 15,
+    color: Colors.dark.textSecondary,
+  },
   topBar: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
-    paddingHorizontal: 16,
-    paddingBottom: 8,
+    paddingHorizontal: 14,
     zIndex: 10,
   },
-  topBarInner: {
+  topRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
   },
-  statusPill: {
+  pill: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(10, 14, 23, 0.85)",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 24,
-    gap: 8,
-    borderWidth: 1,
-    borderColor: Colors.dark.cardBorder,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  statusText: {
-    fontFamily: "Outfit_600SemiBold",
-    fontSize: 14,
-    color: Colors.dark.text,
-  },
-  memberCountPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(10, 14, 23, 0.85)",
+    backgroundColor: "rgba(10, 14, 23, 0.88)",
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 24,
+    paddingVertical: 8,
+    borderRadius: 20,
     gap: 6,
     borderWidth: 1,
     borderColor: Colors.dark.cardBorder,
   },
-  memberCountText: {
-    fontFamily: "Outfit_600SemiBold",
-    fontSize: 14,
-    color: Colors.dark.text,
+  pillDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
   },
-  codePill: {
-    alignSelf: "center",
-    marginTop: 8,
-    backgroundColor: "rgba(10, 14, 23, 0.7)",
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Colors.dark.cardBorder,
-  },
-  codePillText: {
+  pillText: {
     fontFamily: "Outfit_600SemiBold",
     fontSize: 13,
-    color: Colors.dark.primary,
-    letterSpacing: 2,
+    color: Colors.dark.text,
   },
   alertBanner: {
     position: "absolute",
-    left: 16,
-    right: 16,
-    borderRadius: 16,
-    padding: 14,
+    left: 14,
+    right: 14,
+    borderRadius: 14,
+    padding: 12,
     flexDirection: "row",
-    gap: 10,
+    gap: 8,
     borderWidth: 1,
     borderColor: "rgba(255, 71, 87, 0.3)",
     zIndex: 10,
   },
   alertContent: {
     flex: 1,
-    gap: 6,
+    gap: 4,
   },
   alertRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
   },
   alertName: {
-    fontFamily: "Outfit_700Bold",
-    fontSize: 14,
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 13,
     color: Colors.dark.danger,
     flex: 1,
   },
-  alertDistance: {
+  alertDist: {
     fontFamily: "Outfit_600SemiBold",
-    fontSize: 13,
+    fontSize: 12,
     color: Colors.dark.danger,
   },
   alertTime: {
     fontFamily: "Outfit_400Regular",
-    fontSize: 12,
-    color: "rgba(255, 71, 87, 0.7)",
+    fontSize: 11,
+    color: "rgba(255, 71, 87, 0.6)",
   },
-  permissionBanner: {
+  permBanner: {
     position: "absolute",
-    top: "50%",
-    left: 24,
-    right: 24,
-    transform: [{ translateY: -30 }],
+    top: "45%",
+    left: 20,
+    right: 20,
     backgroundColor: Colors.dark.card,
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.dark.cardBorder,
-    padding: 16,
+    padding: 14,
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
     zIndex: 10,
   },
-  permissionText: {
+  permText: {
     fontFamily: "Outfit_400Regular",
-    fontSize: 14,
+    fontSize: 13,
     color: Colors.dark.textSecondary,
     flex: 1,
   },
-  permissionButton: {
+  permAction: {
     fontFamily: "Outfit_600SemiBold",
-    fontSize: 14,
+    fontSize: 13,
     color: Colors.dark.primary,
   },
   bottomPanel: {
@@ -737,160 +594,142 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: "rgba(10, 14, 23, 0.92)",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    backgroundColor: "rgba(10, 14, 23, 0.94)",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     borderWidth: 1,
     borderBottomWidth: 0,
     borderColor: Colors.dark.cardBorder,
   },
-  controlsToggle: {
+  grabberArea: {
     alignItems: "center",
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
   grabber: {
-    width: 40,
+    width: 36,
     height: 4,
     borderRadius: 2,
     backgroundColor: Colors.dark.textMuted,
   },
-  controlsContent: {
+  controlsBody: {
     paddingHorizontal: 8,
     paddingBottom: 8,
-    gap: 12,
+    gap: 10,
   },
-  tetherInfo: {
+  tetherRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
-  tetherInfoLabel: {
+  tetherLabel: {
     fontFamily: "Outfit_500Medium",
-    fontSize: 15,
+    fontSize: 14,
     color: Colors.dark.textSecondary,
   },
-  tetherInfoValue: {
+  tetherVal: {
     fontFamily: "Outfit_700Bold",
-    fontSize: 17,
+    fontSize: 16,
     color: Colors.dark.primary,
   },
-  memberList: {
+  membersList: {
     paddingHorizontal: 16,
-    gap: 8,
+    gap: 6,
   },
-  memberListTitle: {
-    fontFamily: "Outfit_600SemiBold",
-    fontSize: 13,
-    color: Colors.dark.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    marginBottom: 4,
-  },
-  memberListRow: {
+  mlRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
-  memberListDot: {
-    width: 8,
-    height: 8,
+  mlDot: {
+    width: 7,
+    height: 7,
     borderRadius: 4,
   },
-  memberListName: {
+  mlName: {
     fontFamily: "Outfit_500Medium",
-    fontSize: 15,
+    fontSize: 14,
     color: Colors.dark.text,
     flex: 1,
   },
-  memberListDist: {
+  mlDist: {
     fontFamily: "Outfit_600SemiBold",
-    fontSize: 13,
+    fontSize: 12,
     color: Colors.dark.textSecondary,
   },
-  memberListTime: {
-    fontFamily: "Outfit_400Regular",
-    fontSize: 12,
-    color: Colors.dark.textMuted,
-  },
-  actionRow: {
-    paddingHorizontal: 16,
-    paddingTop: 4,
-  },
-  endButton: {
+  endBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 14,
-    borderRadius: 14,
+    paddingVertical: 12,
+    marginHorizontal: 8,
+    borderRadius: 12,
     backgroundColor: Colors.dark.dangerDim,
-    gap: 8,
+    gap: 6,
   },
-  endButtonText: {
+  endBtnText: {
     fontFamily: "Outfit_600SemiBold",
-    fontSize: 15,
+    fontSize: 14,
     color: Colors.dark.danger,
   },
-  miniControls: {
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-  },
-  miniRow: {
+  miniBar: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    paddingHorizontal: 16,
+    paddingBottom: 6,
   },
-  miniStatusRow: {
+  miniLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
   },
   miniDot: {
-    width: 8,
-    height: 8,
+    width: 7,
+    height: 7,
     borderRadius: 4,
   },
   miniText: {
     fontFamily: "Outfit_600SemiBold",
-    fontSize: 14,
+    fontSize: 13,
     color: Colors.dark.text,
   },
   miniTether: {
     fontFamily: "Outfit_500Medium",
-    fontSize: 13,
+    fontSize: 12,
     color: Colors.dark.textSecondary,
   },
   centroidMarker: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: "rgba(0, 229, 160, 0.3)",
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "rgba(0, 229, 160, 0.25)",
     justifyContent: "center",
     alignItems: "center",
   },
   centroidDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: Colors.dark.primary,
   },
-  memberMarkerOuter: {
+  memberMarkerWrap: {
     alignItems: "center",
     gap: 2,
   },
-  memberMarker: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  memberPin: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.3)",
+    borderColor: "rgba(255,255,255,0.25)",
   },
-  markerLabel: {
+  pinLabel: {
     fontFamily: "Outfit_600SemiBold",
-    fontSize: 11,
+    fontSize: 10,
     color: Colors.dark.text,
     textShadowColor: "rgba(0,0,0,0.8)",
     textShadowOffset: { width: 0, height: 1 },
