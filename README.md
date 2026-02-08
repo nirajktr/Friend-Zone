@@ -40,6 +40,6 @@ We learned a lot during this hackathon. From experimenting different tech stacks
 ## What's next for Friend-Zone
 ###Smart Watch Integration 
 ###Battery Prediction
-###***SOLO MODE***
+###SOLO MODE
 
 **Friend-Zone: Finally, a FriendZone you actually *want* to be in.**
